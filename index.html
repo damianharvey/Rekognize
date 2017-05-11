@@ -1,0 +1,234 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>WebcamJS Test Page - HD Capture</title>
+	<style type="text/css">
+		body { font-family: "Open Sans", sans-serif; }
+		h1, h2, h3 { margin-top:0; font-weight: normal;}
+		#my_camera { position: absolute; top: 0; left: 0; width: 100%; height:100%;}
+		#right-panel { z-index: 1000; width: 320px; position: absolute; top:0px; right: 0px; background: rgba(0, 0, 0, 0.4); padding: 20px; color: white; }
+		#right-panel h1 { font-size: 24px; font-family: "Open Sans"}
+		#right-panel h1 img { vertical-align: middle; }
+		#right-panel input {width: 100%; border: 0; font-size: 20px; font-family: "Open Sans Light", "Helvetica Neue Light", Helvetica; background: rgba(134, 188, 37, 1); color: white; padding: 10px 20px;}
+		#right-panel input.processing { background-color: orange;} 
+		#right-panel input.reset { background-color: red;} 
+		#right-panel input:hover { opacity: 0.8; }	
+		#results img { margin-top: 20px; width: 320px;}
+
+	</style>
+</head>
+<body>
+	<div id="my_camera"></div>
+
+	<div id="right-panel">
+		<h1><img src="deloitte-icon.png"/>&nbsp;Deloitte Rekognize</h1>
+		<h3>Demonstrating the cognitive tech of AWS Rekognition.</h3>
+		<form>
+			<input id="button" type=button value="Take Pic" onClick="buttonClick()">
+		</form>
+		<div id="results"></div>
+	</div>
+	
+	<script src="https://sdk.amazonaws.com/js/aws-sdk-2.48.0.min.js"></script>
+	<script type="text/javascript" src="webcam.min.js"></script>
+	<script language="JavaScript">
+		var labels;
+		var facedetails;
+		var cameraWidth = window.innerWidth;
+		var cameraHeight = cameraWidth * 0.562;
+		var processing = false;
+
+		AWS.config.region = 'us-east-1';
+		AWS.config.update({
+		    accessKeyId: "AKIAJWDQZ73PPLIOEN4Q",
+		    secretAccessKey: "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"
+		});
+		var rekognition = new AWS.Rekognition();
+		var s3 = new AWS.S3();
+
+		setupCamera();
+
+		document.onkeydown = checkKey;
+
+		function checkKey(e) {
+			e = e || window.event;
+			if (e.keyCode == "13" || e.keyCode == "32") {
+				buttonClick();
+			}
+		}
+
+		function buttonClick() {
+			if(!processing) {
+				processing = true;
+				var button = document.querySelector("#button");
+				button.value = "Processing...";
+				button.setAttribute("class", "processing")
+				button.disabled = true;
+				takeSnapshot(function() {
+					var button = document.querySelector("#button");
+					button.value = "Reset";	
+					button.setAttribute("class", "reset");
+					button.disabled = false;				
+				});
+			} else {
+				processing = false;
+				resetResults();
+				var button = document.querySelector("#button");
+				button.value = "Take Pic";
+				button.setAttribute("class", "");
+				button.disabled = false;
+			}
+			
+		}
+
+		function setupCamera() {
+			clearResults();
+
+			Webcam.set({
+				dest_width: 1000,
+				dest_height: 1000 * (9 / 16),
+				width: cameraWidth,
+				height: cameraHeight,
+				flip_horiz: true,
+				enable_flash: false,
+				image_format: 'png',
+				jpeg_quality: 90
+			});
+			Webcam.attach("#my_camera");
+		}
+
+		function resetResults() {
+			clearResults();
+			clearPreview();
+		}
+
+		function takeSnapshot(callback) {
+			Webcam.snap(function(data_uri) {
+				showPreview(data_uri);
+				uploadToS3(data_uri, callback);
+			});
+		}
+
+		function uploadToS3(data_uri, callback) {
+			updateResults("Uploading to S3...");
+			var blobData = dataURItoBlob(data_uri);
+			var filename = "upload_"+new Date().getTime()+".png";
+			var bucketname = "rekognize";
+            var params = {Bucket: bucketname, Key: filename, ContentType: "image/png", Body: blobData};
+            s3.putObject(params, function (err, data) {
+                console.log(data);
+                console.log(err ? 'ERROR!' : 'UPLOADED.');
+                rekognizePicture(data_uri, filename, function() {
+                	deleteFromS3(bucketname, filename);
+                	callback();
+                });
+            });
+	    }
+
+	    function deleteFromS3(bucket, file) {
+	    	var params = {
+				Bucket: bucket,
+				Key: file
+			}
+			s3.deleteObject(params, function(err, data) {
+				if (err) {
+					console.log(err, err.stack);
+				} else {
+					console.log("Deleted image from S3: "+data);
+				}
+			});
+	    }
+
+		function rekognizePicture(data_uri, filename, callback) {
+			updateResults("Submitting to Rekognition...");
+			var labelParams = {
+				Image: {
+					S3Object: {
+						Bucket: "rekognize", 
+						Name: filename
+					}
+				}, 
+				MaxLabels: 10
+			};
+			rekognition.detectLabels(labelParams, function(err, data) {
+				if (err) {
+					console.log(err, err.stack); // an error occurred	
+				} else {
+					updateResults("Rekognition complete. Results:");
+					labels = data.Labels;
+					labels.forEach(function(label) {
+						updateResults(label.Name+" ("+Math.round(label.Confidence)+"%)");
+					});
+					rekognizeFaces(data_uri, filename, callback);
+				}
+			});
+		}
+
+		function rekognizeFaces(data_uri, filename, callback) {
+			updateResults("Rekognition working on Faces...");
+			var facesParams = {
+				Image: {
+					S3Object: {
+						Bucket: "rekognize", 
+						Name: filename
+					}
+				},
+				Attributes: [ "ALL" ]
+			};
+
+			rekognition.detectFaces(facesParams, function(err, data) {
+				if (err) {
+					console.log(err, err.stack); // an error occurred	
+				} else {
+					if(data.FaceDetails && data.FaceDetails.length > 0) {
+						facedetails = data.FaceDetails[0];
+						updateResults("Age: "+facedetails.AgeRange.Low+" to "+facedetails.AgeRange.High);
+						updateResults("Smile: "+facedetails.Smile.Value+" ("+Math.round(facedetails.Smile.Confidence)+"%)");
+						emotions = facedetails.Emotions;
+						emotions.forEach(function(emotion) {
+							updateResults(emotion.Type.toLowerCase()+" ("+Math.round(emotion.Confidence)+"%)");
+						});
+					} else {
+						updateResults("No faces found.");
+					}
+					callback();
+				}
+			});
+		}
+
+		function updateResults(message) {
+			document.getElementById('results').innerHTML += "<p>"+message+"</p>";
+		}
+
+		function clearResults() {
+			document.getElementById('results').innerHTML = "";
+		}
+
+		function showPreview(data_uri) {
+			var preview = document.createElement("img");
+			preview.src = data_uri;
+			preview.width = cameraWidth;
+			preview.style = "transform: scaleX(-1);";
+			preview.height = cameraHeight;
+			document.getElementById('my_camera').insertBefore(preview, document.getElementById('my_camera').childNodes[0]);
+		}
+
+		function clearPreview() {
+			document.querySelector("#my_camera").removeChild(document.querySelector("#my_camera > img"));
+		}
+
+		function dataURItoBlob(data_uri) {
+		    var binary = atob(data_uri.split(',')[1]);
+		    var array = [];
+		    for(var i = 0; i < binary.length; i++) {
+		        array.push(binary.charCodeAt(i));
+		    }
+		    return new Blob([new Uint8Array(array)], {type: 'image/png'});
+		}
+	</script>
+
+</body>
+</html>
