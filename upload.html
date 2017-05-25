@@ -1,0 +1,76 @@
+
+<!doctype html>
+
+<html lang="en">
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<title>WebcamJS Test Page - HD Capture</title>
+	<style type="text/css">
+		body { font-family: "Open Sans", sans-serif; }
+		h1, h2, h3 { margin-top:0; font-weight: normal;}
+		input { padding: 6px; }
+		input#button {border: 0; font-size: 20px; font-family: "Open Sans Light", "Helvetica Neue Light", Helvetica; background: rgba(134, 188, 37, 1); color: white; padding: 10px 20px;}
+		input#button.processing { background-color: orange;} 
+		input#button.reset { background-color: red;} 
+		input#button:hover { opacity: 0.8; }			
+	</style>
+</head>
+<body>
+	<form>
+		<input type="text" name="name" id="name" value="" placeholder="Enter the name of the person in the photo" size="100"/><br/>
+		<input type="file"/><br/>
+		<input id="button" type=button value="Upload" onClick="loadFile()">
+	</form>
+	<img src="" alt="Image preview...">
+	
+	<script src="https://sdk.amazonaws.com/js/aws-sdk-2.48.0.min.js"></script>
+	<script type="text/javascript" src="webcam.min.js"></script>
+	<script language="JavaScript">
+
+		AWS.config.region = 'us-east-1';
+		AWS.config.update({
+		    accessKeyId: "AKIAJWDQZ73PPLIOEN4Q",
+		    secretAccessKey: "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"
+		});
+		var s3 = new AWS.S3();
+
+		function loadFile() {
+			var preview = document.querySelector('img');
+			var file    = document.querySelector('input[type=file]').files[0];
+			var reader  = new FileReader();
+
+			reader.addEventListener("load", function () {
+				preview.src = reader.result;
+				uploadToS3(reader.result, function() {
+					console.log("File uploaded OK");
+				});
+			}, false);
+			if (file) {
+				reader.readAsDataURL(file);
+			}
+		}
+		function uploadToS3(data_uri, callback) {
+			var blobData = dataURItoBlob(data_uri);
+			var filename = "upload_"+new Date().getTime()+".png";
+			var bucketname = "rekognize-faces";
+            var params = {Bucket: bucketname, Key: filename, ContentType: "image/png", Body: blobData};
+            s3.putObject(params, function (err, data) {
+                console.log(data);
+                console.log(err ? 'ERROR!' : 'UPLOADED.');
+            	callback();
+            });
+
+	    }
+
+		function dataURItoBlob(data_uri) {
+		    var binary = atob(data_uri.split(',')[1]);
+		    var array = [];
+		    for(var i = 0; i < binary.length; i++) {
+		        array.push(binary.charCodeAt(i));
+		    }
+		    return new Blob([new Uint8Array(array)], {type: 'image/png'});
+		}
+	</script>
+
+</body>
+</html>
