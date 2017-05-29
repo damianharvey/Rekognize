@@ -17,10 +17,12 @@
 		#right-panel input.reset { background-color: red;} 
 		#right-panel input:hover { opacity: 0.8; }	
 		#results img { margin-top: 20px; width: 320px;}
+		.found-face { width:200px; position:absolute; z-index: 9999; text-align:center; color: white; font-size: 80px; top:0; left: 0; background: rgba(0, 0, 0, .8);}
+		.found-face .face-similarity { color: white; z-index: 99999; position: relative;}
 
 	</style>
 </head>
-<body>
+<body id="body">
 	<div id="my_camera"></div>
 
 	<div id="right-panel">
@@ -103,6 +105,7 @@
 		function resetResults() {
 			clearResults();
 			clearPreview();
+			clearFoundFaces();
 		}
 
 		function takeSnapshot(callback) {
@@ -191,11 +194,70 @@
 						emotions.forEach(function(emotion) {
 							updateResults(emotion.Type.toLowerCase()+" ("+Math.round(emotion.Confidence)+"%)");
 						});
+						rekognizeSearchPeople(data_uri, filename, callback);
 					} else {
 						updateResults("No faces found.");
+						callback();
 					}
-					callback();
 				}
+			});
+		}
+
+		function rekognizeSearchPeople(data_uri, filename, callback) {
+			var searchParams = {
+				CollectionId: "faces-collection",
+				FaceMatchThreshold: 20,
+				Image: { 
+					S3Object: {
+						Bucket: "rekognize", 
+						Name: filename
+					}
+				},
+				MaxFaces: 3
+			};
+
+			rekognition.searchFacesByImage(searchParams, function(err, data) {
+				if(err) {
+					console.error(err);
+				} else {
+					var div = document.createElement("div");
+					div.setAttribute("class", "found-face");
+
+					if(data.FaceMatches && data.FaceMatches.length > 0) {
+						var face = data.FaceMatches[0];
+
+						if(face.Face.ExternalImageId) {
+							var thumb = document.createElement("img");
+							thumb.src = "https://s3.amazonaws.com/rekognize-faces/"+face.Face.ExternalImageId;
+							thumb.width = 200;
+							thumb.setAttribute("class","found-face");							
+
+							var span = document.createElement("span");
+							span.setAttribute("class", "face-similarity");
+							var spanText = document.createTextNode(Math.floor(face.Similarity)+"%");
+							span.appendChild(spanText);
+
+							div.appendChild(thumb);
+							div.appendChild(span);
+						}
+					} else {
+						var span = document.createElement("span");
+						span.setAttribute("class", "face-similarity");
+						var spanText = document.createTextNode("0%");
+						span.appendChild(spanText);
+
+						var noMatch = document.createElement("div");
+						noMatch.style = "font-size: 20px;"
+						var noMatchText = document.createTextNode("Could not find you");
+						noMatch.appendChild(noMatchText); 
+
+						div.appendChild(noMatch);                                
+						div.appendChild(span);
+						
+					}
+					document.getElementById('body').insertBefore(div, document.getElementById('body').childNodes[0]);
+				}
+				callback();
 			});
 		}
 
@@ -205,6 +267,12 @@
 
 		function clearResults() {
 			document.getElementById('results').innerHTML = "";
+		}
+
+		function clearFoundFaces() {
+			if(document.querySelector(".found-face") != null) {
+				document.querySelector("#body").removeChild(document.querySelector(".found-face"));
+			}
 		}
 
 		function showPreview(data_uri) {
