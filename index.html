@@ -6,7 +6,7 @@
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 	<title>WebcamJS Test Page - HD Capture</title>
 	<style type="text/css">
-		body { font-family: "Open Sans", sans-serif; }
+		body { font-family: "Open Sans", sans-serif; height: 100%; overflow: hidden;}
 		h1, h2, h3 { margin-top:0; font-weight: normal;}
 		#my_camera { position: absolute; top: 0; left: 0; width: 100%; height:100%;}
 		#right-panel { z-index: 1000; width: 320px; position: absolute; top:0px; right: 0px; background: rgba(0, 0, 0, 0.4); padding: 20px; color: white; }
@@ -224,6 +224,7 @@
 					div.setAttribute("class", "found-face");
 
 					if(data.FaceMatches && data.FaceMatches.length > 0) {
+							
 						var face = data.FaceMatches[0];
 
 						if(face.Face.ExternalImageId) {
