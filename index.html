@@ -8,6 +8,7 @@
 	<style type="text/css">
 		body { font-family: "Open Sans", sans-serif; height: 100%; overflow: hidden;}
 		h1, h2, h3 { margin-top:0; font-weight: normal;}
+		#faces { overflow-y: scroll; height: 100%; float: left; width: 200px; position: absolute; top: 0; left: 0; }
 		#my_camera { position: absolute; top: 0; left: 0; width: 100%; height:100%;}
 		#right-panel { z-index: 1000; width: 320px; position: absolute; top:0px; right: 0px; background: rgba(0, 0, 0, 0.4); padding: 20px; color: white; height:100%; overflow: scroll;}
 		#right-panel h1 { font-size: 24px; font-family: "Open Sans"}
@@ -19,6 +20,7 @@
 		#results p { font-size: 16px; margin: 2px 0px;}
 		#results img { margin-top: 20px; width: 320px;}
 		.found-face { display: block; width:200px; position:relative; z-index: 9999; text-align:center; color: white; top:0; left: 0; background: rgba(0, 0, 0, .8);}
+		.found-face img { width: 200px; }
 		.found-face .face-similarity { color: white; z-index: 99999; position: absolute; bottom: 0; left: 0; width: 100%; background: rgba(0,0,0,.3); font-size: 50px;}
 		.face-box { position: absolute; left: 0; top: 0; }
 
@@ -186,7 +188,7 @@
 
 			rekognition.detectFaces(facesParams, function(err, data) {
 				if (err) {
-					console.log(err, err.stack); // an error occurred	
+					console.log(err, err.stack);
 				} else {
 					if(data.FaceDetails && data.FaceDetails.length > 0) {
 						facedetails = data.FaceDetails[0];
@@ -252,7 +254,6 @@
 
 								var thumb = document.createElement("img");
 								thumb.src = "https://s3.amazonaws.com/rekognize-faces/"+face.Face.ExternalImageId;
-								thumb.width = 150;
 
 								var span = document.createElement("span");
 								span.setAttribute("class", "face-similarity");
